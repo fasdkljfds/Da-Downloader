@@ -8,8 +8,7 @@ headers = {
 }
 
 response = requests.get(
-    url='''https://api.bilibili.com/x/v3/fav/resource/list?media_id=1003383619&pn=3&ps=40&keyword=&order=mtime&type=0&tid=0&platform=web&web_location=333.1387''',
+        url='''https://api.bilibili.com/x/v3/fav/resource/list?media_id=1003383619&pn=3&ps=40&keyword=&order=mtime&type=0&tid=0&platform=web&web_location=333.1387''',
     headers=headers)
-
 
 a = json.loads(response.text)['data']['medias']
