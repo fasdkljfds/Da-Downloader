@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug wallhaven module",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "downloader.wallhaven",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": []
+    }
+  ]
+}

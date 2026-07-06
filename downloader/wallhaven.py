@@ -11,9 +11,6 @@
 
 
 
-
-
-
 from __future__ import annotations
 
 
@@ -314,6 +311,7 @@ class WallhavenDownloader:
         return ids
 
     def download_page(self, page: int, force: bool = False) -> DownloadResult:
+        
         image_ids = self.get_page_image_ids(page=page)
         self._log(f"Page {page}: found {len(image_ids)} images")
         return self.download_image_ids(image_ids, force=force)
@@ -411,4 +409,18 @@ def print_result(result: DownloadResult, stream=None):
 
 
 if __name__ == '__main__':
-    download_page(1)
+    downloader = WallhavenDownloader(
+        save_dir=r"F:\estore\wallpaper_test",
+        extensions=(".jpg", ".png", ".jpeg"),
+        site_url="https://wallhaven.cc/user/sjjfirk/favorites/2119257?purity=111&page=",
+        cookie="""_pk_id.1.01b8=4ba6e2403d32ff0e.1766719365.; remember_web_59ba36addc2b2f9401580f014c7f58ea4e30989d=eyJpdiI6Im8ycHhnUzlkdnFnS0ZBMVBTa3c0dWc9PSIsInZhbHVlIjoiYWYraTVUZW1GM0VqTU5XUm0rQmxGa1FRcGJPb0JheFJhdFJXUkYxSFM5Mk1Ec1hnMWF5WU5jb0NjSkpacXlMRlIzRCtDc0pGUldIZzIyMTU4N2NpOHhjWUI3M0NUTzZGbGcrYWlKWTZDajY0aDVZQWMrT2lLRGxuZTlFSEZSNUt3VitnT1Y5ZTM0Z1ZQdERcL1NMRGxXdTNNMnJHR3lIblpMR21jeGpXbXF3VVRNWnBFU3IzSlpKemVUdFE2elFIdiIsIm1hYyI6ImMxYTE1NmMwM2JjZjlkYzQ0N2Q2ODhiZjIwNDU1MWJmN2U1YmUzYmIwZjM3MzcyYWJkNDhkM2E3MjRmZTYwZGUifQ%3D%3D; _pk_ref.1.01b8=%5B%22%22%2C%22%22%2C1783350762%2C%22https%3A%2F%2Fwww.google.com%2F%22%5D; _pk_ses.1.01b8=1; cf_clearance=yBqKgLiEs58dehVpTmbXqGPykQBxDAvICNZCXX5_6F4-1783351737-1.2.1.1-BDxadEI99aea1ee9842FMz6jyUWuCcuhth1Qs8nSg_fh1jhx7823c6mCBwv_FXnIpH9x4F0W7Js1Ld8kYHe58CqhyRDjIjSG5nPOzSXRqAEZ5BUBiozyj7Pq7LTeuA67bHtwI4xz44fMZLyrFoq.qj5LNKYz0rv1eV4sdWxWdwC_XyKCnbZKe8VZLMwb7J2x_NZEW9n8_3wdkZV4LlxE8f.EjzPar1iIlMkAP1bjQzm0NLWAQWkzBmVE78lokS9UBesjWkgNY8o5ye93PSg0A3E.To9leXJF_sw9SLQ8mv7Q.5NCFPLZnGhecvH9SPqwF6qfLRpJkTcXpXv3IpwEhNrYqxr5LfdAcakFG_5bTwWFXhvjguD0bbNl2RDzQ4Z9NfanJ3abchATAyd6INNGrxUksO7F592Ry6vko9T7gRXDA7rPKfINxzDKidNpGEiE; XSRF-TOKEN=eyJpdiI6IjMzTTJBWmlkcU53ODVadWZ6R2xMYVE9PSIsInZhbHVlIjoiaXVLNWFEYys3MkhoUzE5Sm9sS09HalhMTTdDUUhhTHN0bnl2WkU2ekFPYlRDZGZSN1NyU2ZuT2M1cGxlRGlGNyIsIm1hYyI6ImUzMzcyYzAxMzNmYzA4MmYzMGJlMmI0YzdmZjU5MDY5ODFiMTgwYTZhYjgyODMzOWQ4MmIyZTBjZmM5N2NiNWIifQ%3D%3D; wallhaven_session=eyJpdiI6IkhGQTJaS2cwVnRcLzFEYlZsN200WFV3PT0iLCJ2YWx1ZSI6IlFkdU50dnhUVE9VdU9aNitUdWxBb0hUNkErOVwvOU5YQUVuejliS043angrSEp1ZHVMcmpSbVROeEl2YktVQ0hkIiwibWFjIjoiYmEyN2QzOTZkOTI2MzM3ZGY4NTY2ZDdlNzllMjk4MzQ4N2IwMjEzM2QzNWIxMmUxNjhkYWE5ZjAxOGNiZGEyZiJ9""",
+        referer=None,
+        timeout=15,
+        max_tries=3,
+        delay=0,
+    )
+
+
+    print(downloader.get_page_image_ids(1))
+    print(downloader.get_page_image_ids(2))
+    print(downloader.get_page_image_ids(3))

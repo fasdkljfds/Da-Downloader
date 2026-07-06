@@ -24,7 +24,7 @@ class Library:
         self.cookie = cookie
         self.referer = referer
         self.site_url = site_url
-
+        
         match self.source:
             case Source.wallhaven:
                 self.downloader = self._create_wallhaven_downloader()
