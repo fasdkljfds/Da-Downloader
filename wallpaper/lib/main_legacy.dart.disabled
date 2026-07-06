@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const ElegantWallpaperApp());
@@ -39,10 +41,11 @@ class WallpaperHomePage extends StatefulWidget {
 class _WallpaperHomePageState extends State<WallpaperHomePage> {
   List<File> _imageFiles =[];
   bool _isLoading = false;
-
+  double _gridItemMaxWidth = 260; 
+  
   // 核心功能1：打开文件夹并读取图片
   Future<void> _pickFolderAndLoadImages() async {
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      String? selectedDirectory = await FilePicker.getDirectoryPath();
 
     if (selectedDirectory == null) return; // 用户取消了选择
 
@@ -146,54 +149,70 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
 
   // 核心功能3：缩略图展示
   Widget _buildImageGrid() {
-    return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, // 两列布局
-        childAspectRatio: 0.65, // 偏长方形，适合手机壁纸比例
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _imageFiles.length,
-      itemBuilder: (context, index) {
-        final file = _imageFiles[index];
-        return GestureDetector(
-          onTap: () {
-            // 点击弹出大图AA
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                transitionDuration: const Duration(milliseconds: 400),
-                pageBuilder: (_, __, ___) => ImagePreviewPage(imageFile: file),
-                transitionsBuilder: (_, animation, __, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-              ),
-            );
-          },
-          child: Hero(
-            tag: file.path, // 开启Hero动画，图片飞跃效果
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Image.file(
-                file,
-                fit: BoxFit.cover,
-                // 加载过程中的过渡效果
-                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                  if (wasSynchronouslyLoaded) return child;
-                  return AnimatedOpacity(
-                    opacity: frame == null ? 0 : 1,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOut,
-                    child: child,
-                  );
-                },
+    return Listener(
+      onPointerSignal: (PointerSignalEvent event) {
+        if (event is PointerScrollEvent &&
+            HardwareKeyboard.instance.isControlPressed) {
+          setState(() {
+            // 向上滚：放大；向下滚：缩小
+            if (event.scrollDelta.dy < 0) {
+              _gridItemMaxWidth += 20;
+            } else {
+              _gridItemMaxWidth -= 20;
+            }
+
+            // 限制最大/最小缩放范围
+            _gridItemMaxWidth = _gridItemMaxWidth.clamp(120, 420);
+          });
+        }
+      },
+      child: GridView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        physics: const BouncingScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: _gridItemMaxWidth,
+          childAspectRatio: 0.65,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: _imageFiles.length,
+        itemBuilder: (context, index) {
+          final file = _imageFiles[index];
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                PageRouteBuilder(
+                  transitionDuration: const Duration(milliseconds: 400),
+                  pageBuilder: (_, _, _) => ImagePreviewPage(imageFile: file),
+                  transitionsBuilder: (_, animation, _, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                ),
+              );
+            },
+            child: Hero(
+              tag: file.path,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.file(
+                  file,
+                  fit: BoxFit.cover,
+                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                    if (wasSynchronouslyLoaded) return child;
+                    return AnimatedOpacity(
+                      opacity: frame == null ? 0 : 1,
+                      duration: const Duration(milliseconds: 500),
+                      curve: Curves.easeOut,
+                      child: child,
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -205,21 +224,87 @@ class ImagePreviewPage extends StatelessWidget {
   const ImagePreviewPage({super.key, required this.imageFile});
 
   // 模拟更换壁纸的方法
-  void _setWallpaper(BuildContext context) {
-    // 【TODO】在此处调用具体平台的壁纸设置API
-    // 比如使用 async_wallpaper 插件:
-    // await AsyncWallpaper.setWallpaperFromFile(file.path, AsyncWallpaper.HOME_SCREEN);
+  Future<void> _setWallpaper(BuildContext context) async {
+    try {
+      if (!Platform.isWindows) {
+        throw Exception("当前代码只支持 Windows 设置壁纸");
+      }
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("壁纸更换成功！", style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
-      ),
+      await _setWindowsWallpaper(imageFile.path);
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            "壁纸更换成功！",
+            style: TextStyle(color: Colors.black),
+          ),
+          backgroundColor: Colors.white,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
+        ),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("壁纸更换失败：$e"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _setWindowsWallpaper(String imagePath) async {
+    final escapedPath = imagePath.replaceAll("'", "''");
+
+    final script = '''
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public class Wallpaper {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool SystemParametersInfo(
+        int uAction,
+        int uParam,
+        string lpvParam,
+        int fuWinIni
     );
-    Navigator.pop(context);
+}
+"@
+
+\$ok = [Wallpaper]::SystemParametersInfo(20, 0, '$escapedPath', 3)
+
+if (-not \$ok) {
+    exit 1
+}
+  ''';
+
+    final result = await Process.run(
+      'powershell',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        script,
+      ],
+    );
+
+    if (result.exitCode != 0) {
+      throw Exception(
+        result.stderr.toString().trim().isEmpty
+            ? "Windows API 调用失败"
+            : result.stderr.toString().trim(),
+      );
+    }
   }
 
   @override
@@ -267,7 +352,7 @@ class ImagePreviewPage extends StatelessWidget {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: GestureDetector(
-                  onTap: () => _setWallpaper(context),
+                  onTap: () async => await _setWallpaper(context),
                   child: Container(
                     height: 64,
                     decoration: BoxDecoration(

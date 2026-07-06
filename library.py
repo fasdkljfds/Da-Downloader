@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from enum import Enum
 
@@ -6,8 +8,6 @@ from downloader.wallhaven import DEFAULT_SITE_URL, WallhavenDownloader
 
 class Source(Enum):
     wallhaven = 1
-
-
 class Library:
     def __init__(
         self,
@@ -33,6 +33,20 @@ class Library:
 
     def pull_page(self, page: int):
         return self.downloader.download_page(page=page)
+
+    def update(
+        self,
+        start_page: int = 1,
+        max_pages: int | None = None,
+        force: bool = False,
+        stop_when_known: bool = True,
+    ):
+        return self.downloader.update(
+            start_page=start_page,
+            max_pages=max_pages,
+            force=force,
+            stop_when_known=stop_when_known,
+        )
 
     def _create_wallhaven_downloader(self) -> WallhavenDownloader:
         return WallhavenDownloader(

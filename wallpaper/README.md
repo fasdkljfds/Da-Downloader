@@ -1,17 +1,26 @@
-# wallpaper
+# Da Downloader GUI
 
-A new Flutter project.
+Windows desktop Flutter GUI for the Wallhaven downloader in this repository.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+From `wallpaper/`:
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+flutter run -d windows
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+The app calls the Python CLI through `py -B -m cli.cli_main --json ...`, so run it from this repo with `py.exe` available on PATH.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Checks
+
+```powershell
+flutter analyze
+flutter test
+```
+
+Python checks from the repo root:
+
+```powershell
+py -B -m unittest discover -v
+```
