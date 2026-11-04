@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from cli.cli_main import main
 from cli.youtube_cli import resolve_youtube_url
-from downloader.youtube import DEFAULT_FORMAT_SELECTOR, YoutubeDownloader
+from downloader.youtube import DEFAULT_FORMAT_SELCTOR, YoutubeDownloader
 
 
 class YoutubeCliParsingTest(unittest.TestCase):
@@ -17,7 +17,7 @@ class YoutubeCliParsingTest(unittest.TestCase):
             resolve_youtube_url(["https://youtu.be/XtqHoVXCGKU"]),
             "https://youtu.be/XtqHoVXCGKU",
         )
-
+        
     def test_resolve_youtube_url_accepts_download_word(self):
         self.assertEqual(
             resolve_youtube_url(["download", "https://youtu.be/XtqHoVXCGKU"]),
