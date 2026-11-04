@@ -4,6 +4,8 @@ import argparse
 import os
 
 from downloader.wallhaven import (
+    MAIN_PAGES,
+    create_default_downloader,
     DEFAULT_EXTENSIONS,
     DEFAULT_SITE_URL,
     TARGET_SITE_URL,
@@ -128,6 +130,11 @@ def create_wallhaven_downloader(args: argparse.Namespace) -> WallhavenDownloader
     )
 
 
+def run_quick_update(args: argparse.Namespace) -> DownloadResult:
+    downloader = create_default_downloader()
+    return downloader.download_pages(MAIN_PAGES)
+
+
 def run_page(args: argparse.Namespace) -> DownloadResult:
     downloader = create_wallhaven_downloader(args)
     return downloader.download_pages(args.pages, force=args.force)
@@ -172,6 +179,11 @@ def print_status(status: dict[str, object]):
 def add_wallhaven_parser(subparsers) -> argparse.ArgumentParser:
     wallhaven = subparsers.add_parser("wallhaven", help="Download images from Wallhaven.")
     wallhaven_subparsers = wallhaven.add_subparsers(dest="action", required=True)
+
+    quick_parser = wallhaven_subparsers.add_parser(
+        "quick-update", help="Download using the wallhaven.py main configuration."
+    )
+    quick_parser.set_defaults(func=run_quick_update, printer=print_result)
 
     page_parser = wallhaven_subparsers.add_parser(
         "page",

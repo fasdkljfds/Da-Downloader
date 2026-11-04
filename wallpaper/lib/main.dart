@@ -3,24 +3,23 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'hidden_wallpapers.dart';
 
 void main() {
   runApp(const DaDownloaderApp());
 }
 
-const _defaultSiteUrl =
-    'https://wallhaven.cc/user/sjjfirk/favorites/2119257?purity=110&page=';
 const _imageExtensions = {'.jpg', '.jpeg', '.png'};
 
-const _ink = Color(0xFF07090C);
-const _surface = Color(0xFF101318);
-const _surfaceHigh = Color(0xFF171B22);
-const _line = Color(0xFF262C36);
-const _accent = Color(0xFF79C7C5);
+const _ink = Color(0xFF11151B);
+const _surface = Color(0xFF171D25);
+const _surfaceHigh = Color(0xFF202833);
+const _line = Color(0xFF2A3441);
+const _accent = Color(0xFFA9D8C5);
 const _text = Color(0xFFE9EEF4);
 const _muted = Color(0xFF8C95A3);
 const _danger = Color(0xFFE56B6F);
@@ -281,17 +280,26 @@ class WallpaperHomePage extends StatefulWidget {
 }
 
 class _WallpaperHomePageState extends State<WallpaperHomePage> {
-  late final TextEditingController _saveDirController;
-  late final TextEditingController _siteUrlController;
-  late final TextEditingController _cookieController;
-  late final TextEditingController _refererController;
-  late final TextEditingController _extensionsController;
-  late final TextEditingController _pageRangeController;
-  late final TextEditingController _imageController;
-  late final TextEditingController _startPageController;
-  late final TextEditingController _maxPagesController;
+  late final String _saveDir;
   late final ScrollController _logController;
   late final String _repoRoot;
+  late final HiddenWallpapers _hiddenStore;
+  final Set<String> _hidden = {};
+  final _preview = ValueNotifier<File?>(null);
+  final _galleryController = ScrollController();
+  final _hiddenGalleryController = ScrollController();
+  bool _showHidden = false;
+  bool _savingHidden = false;
+  bool _hiddenLoadFailed = false;
+  final Set<String> _selectedPaths = {};
+  bool _multiSelect = false;
+  String? _selectionAnchor;
+
+  List<File> get _visibleFiles => _imageFiles
+      .where(
+        (file) => _hidden.contains(_hiddenStore.keyFor(file)) == _showHidden,
+      )
+      .toList();
 
   final List<File> _imageFiles = [];
   final List<String> _logs = [];
@@ -299,7 +307,6 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
   Map<String, dynamic>? _lastPayload;
   bool _isLoading = false;
   bool _isRunning = false;
-  bool _force = false;
   String _status = '就绪';
   double _gridItemWidth = 260;
 
@@ -307,17 +314,9 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
   void initState() {
     super.initState();
     _repoRoot = widget.initialRepoRoot ?? _detectRepoRoot();
-    _saveDirController = TextEditingController(
-      text: widget.initialSaveDir ?? _defaultSaveDir(_repoRoot),
-    );
-    _siteUrlController = TextEditingController(text: _defaultSiteUrl);
-    _cookieController = TextEditingController();
-    _refererController = TextEditingController();
-    _extensionsController = TextEditingController(text: 'jpg,png,jpeg');
-    _pageRangeController = TextEditingController(text: '1');
-    _imageController = TextEditingController();
-    _startPageController = TextEditingController(text: '1');
-    _maxPagesController = TextEditingController(text: '3');
+    _saveDir = widget.initialSaveDir ?? _defaultSaveDir(_repoRoot);
+    _hiddenStore = HiddenWallpapers(_saveDir);
+    _loadHidden();
     _logController = ScrollController();
     _imageFiles.addAll(widget.initialImageFiles ?? []);
     if (_imageFiles.isNotEmpty) {
@@ -333,75 +332,141 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
 
   @override
   void dispose() {
-    _saveDirController.dispose();
-    _siteUrlController.dispose();
-    _cookieController.dispose();
-    _refererController.dispose();
-    _extensionsController.dispose();
-    _pageRangeController.dispose();
-    _imageController.dispose();
-    _startPageController.dispose();
-    _maxPagesController.dispose();
+    _preview.dispose();
+    _galleryController.dispose();
+    _hiddenGalleryController.dispose();
     _logController.dispose();
     widget.cliService.cancel();
     super.dispose();
   }
 
-  String get _saveDir => _saveDirController.text.trim();
-
   @override
   Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (_preview.value != null) {
+            _closePreview();
+          } else {
+            setState(() {
+              _selectedPaths.clear();
+              _selectedFile = null;
+              _multiSelect = false;
+            });
+          }
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: ValueListenableBuilder<File?>(
+          valueListenable: _preview,
+          child: _buildHome(),
+          builder: (context, file, home) => Stack(
+            fit: StackFit.expand,
+            children: [
+              home!,
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: file == null,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    reverseDuration: const Duration(milliseconds: 160),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(
+                        scale: Tween<double>(
+                          begin: 0.96,
+                          end: 1,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    child: file == null
+                        ? null
+                        : WallpaperPreviewPage(
+                            key: ValueKey(file.path),
+                            imageFile: file,
+                            onClose: _closePreview,
+                            isHidden: _hidden.contains(
+                              _hiddenStore.keyFor(file),
+                            ),
+                            onToggleHidden: () => _toggleHidden(file),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHome() {
     return Scaffold(
       body: SafeArea(
         child: Row(
           children: [
-            _ControlRail(
-              isRunning: _isRunning,
-              force: _force,
-              saveDirController: _saveDirController,
-              siteUrlController: _siteUrlController,
-              cookieController: _cookieController,
-              refererController: _refererController,
-              extensionsController: _extensionsController,
-              pageRangeController: _pageRangeController,
-              imageController: _imageController,
-              startPageController: _startPageController,
-              maxPagesController: _maxPagesController,
-              onForceChanged: (value) => setState(() => _force = value),
-              onPickFolder: _pickFolder,
-              onRefresh: _refreshLibrary,
-              onOpenFolder: () => _openFolder(_saveDir),
-              onUpdate: _runUpdate,
-              onDownloadPages: _runDownloadPages,
-              onDownloadImage: _runDownloadImage,
-              onRetry: _runRetry,
-              onCancel: _cancelJob,
-            ),
+            _ControlRail(isRunning: _isRunning, onUpdate: _runUpdate),
             Expanded(
               child: Column(
                 children: [
                   _GalleryHeader(
-                    count: _imageFiles.length,
+                    count: _visibleFiles.length,
+                    selectionCount: _selectedPaths.length,
+                    multiSelect: _multiSelect,
+                    onToggleMultiSelect: () => setState(() {
+                      _multiSelect = !_multiSelect;
+                      _selectedPaths.clear();
+                      _selectedFile = null;
+                      _selectionAnchor = null;
+                    }),
+                    onSelectAll: () => setState(() {
+                      _selectedPaths.addAll(
+                        _visibleFiles.map((file) => file.path),
+                      );
+                      _selectedFile = _visibleFiles.lastOrNull;
+                    }),
+                    showHidden: _showHidden,
+                    onToggleHiddenView: () => setState(() {
+                      _showHidden = !_showHidden;
+                      _selectedFile = null;
+                      _selectedPaths.clear();
+                      _selectionAnchor = null;
+                    }),
+                    onToggleHidden: _selectedPaths.isEmpty || _savingHidden
+                        ? null
+                        : () => _setHidden(
+                            _imageFiles
+                                .where(
+                                  (file) => _selectedPaths.contains(file.path),
+                                )
+                                .toList(),
+                            hide: !_showHidden,
+                          ),
                     selectedFile: _selectedFile,
                     status: _status,
                     isRunning: _isRunning,
                     onRefresh: _refreshLibrary,
-                    onOpenSelected: _selectedFile == null
+                    onOpenSelected: _selectedPaths.length != 1
                         ? null
                         : () => _openFile(_selectedFile!),
-                    onOpenSelectedFolder: _selectedFile == null
+                    onOpenSelectedFolder: _selectedPaths.length != 1
                         ? null
                         : () => _openFolder(_selectedFile!.parent.path),
-                    onSetWallpaper: _selectedFile == null
+                    onSetWallpaper: _selectedPaths.length != 1
                         ? null
                         : () => _setWallpaper(_selectedFile!),
                   ),
                   Expanded(child: _buildGallery()),
-                  _JobConsole(
-                    payload: _lastPayload,
-                    logs: _logs,
-                    controller: _logController,
-                  ),
+                  if (_logs.isNotEmpty || _lastPayload != null)
+                    _JobConsole(
+                      payload: _lastPayload,
+                      logs: _logs,
+                      controller: _logController,
+                    ),
                 ],
               ),
             ),
@@ -412,6 +477,10 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
   }
 
   Widget _buildGallery() {
+    if (_hiddenLoadFailed) {
+      return const Center(child: Text('隐藏记录读取失败，请刷新重试。'));
+    }
+    final files = _visibleFiles;
     return Listener(
       onPointerSignal: (event) {
         if (event is PointerScrollEvent &&
@@ -422,48 +491,49 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
           });
         }
       },
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 160),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: _accent))
-            : _imageFiles.isEmpty
-            ? _EmptyGallery(onPickFolder: _pickFolder, onUpdate: _runUpdate)
-            : GridView.builder(
-                key: const ValueKey('gallery-grid'),
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: _gridItemWidth,
-                  childAspectRatio: 0.68,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                ),
-                itemCount: _imageFiles.length,
-                itemBuilder: (context, index) {
-                  final file = _imageFiles[index];
-                  return _WallpaperTile(
-                    file: file,
-                    selected: file.path == _selectedFile?.path,
-                    onSelected: () => setState(() => _selectedFile = file),
-                    onOpenPreview: () => _openPreview(file),
-                  );
-                },
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: _accent))
+          : files.isEmpty && _showHidden
+          ? const Center(child: Text('暂无已隐藏的壁纸'))
+          : files.isEmpty
+          ? const _EmptyGallery()
+          : GridView.builder(
+              key: ValueKey(
+                _showHidden ? 'hidden-gallery-grid' : 'gallery-grid',
               ),
-      ),
+              controller: _showHidden
+                  ? _hiddenGalleryController
+                  : _galleryController,
+              padding: const EdgeInsets.all(24),
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: _gridItemWidth,
+                childAspectRatio: 1.45,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+              ),
+              itemCount: files.length,
+              findChildIndexCallback: (key) {
+                final index = files.indexWhere(
+                  (file) => ValueKey(file.path) == key,
+                );
+                return index < 0 ? null : index;
+              },
+              itemBuilder: (context, index) {
+                final file = files[index];
+                return _WallpaperTile(
+                  key: ValueKey(file.path),
+                  file: file,
+                  selected: _selectedPaths.contains(file.path),
+                  onSelected: () => _selectFile(file),
+                  onOpenPreview: () => _openPreview(file),
+                );
+              },
+            ),
     );
   }
 
-  Future<void> _pickFolder() async {
-    final selectedDirectory = await FilePicker.getDirectoryPath();
-    if (selectedDirectory == null) {
-      return;
-    }
-    _saveDirController.text = selectedDirectory;
-    if (widget.refreshAfterJob) {
-      await _refreshLibrary();
-    }
-  }
-
   Future<void> _refreshLibrary() async {
+    _loadHidden();
     setState(() {
       _isLoading = true;
       _status = '刷新图库';
@@ -496,10 +566,10 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
         _imageFiles
           ..clear()
           ..addAll(files);
-        if (_selectedFile != null &&
-            !_imageFiles.any((file) => file.path == _selectedFile!.path)) {
-          _selectedFile = null;
-        }
+        _selectedPaths.retainAll(_visibleFiles.map((file) => file.path));
+        _selectedFile = files
+            .where((file) => _selectedPaths.contains(file.path))
+            .lastOrNull;
         _status = '已载入 ${files.length} 张';
       });
     } catch (error) {
@@ -520,44 +590,7 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
   }
 
   Future<void> _runUpdate() async {
-    final args = [
-      'update',
-      ..._commonArgs(),
-      '--start-page',
-      _startPageController.text.trim().isEmpty
-          ? '1'
-          : _startPageController.text.trim(),
-    ];
-    final maxPages = _maxPagesController.text.trim();
-    if (maxPages.isNotEmpty) {
-      args.addAll(['--max-pages', maxPages]);
-    }
-
-    args.add('--no-stop-when-known');
-
-    await _runWallhavenJob('更新收藏', args);
-  }
-
-  Future<void> _runDownloadPages() async {
-    final pages = _pageRangeController.text.trim();
-    if (pages.isEmpty) {
-      _showSnack('请输入页码');
-      return;
-    }
-    await _runWallhavenJob('下载页面', ['page', ..._commonArgs(), pages]);
-  }
-
-  Future<void> _runDownloadImage() async {
-    final image = _imageController.text.trim();
-    if (image.isEmpty) {
-      _showSnack('请输入图片 ID 或链接');
-      return;
-    }
-    await _runWallhavenJob('下载单图', ['image', ..._commonArgs(), image]);
-  }
-
-  Future<void> _runRetry() async {
-    await _runWallhavenJob('重试失败', ['retry', ..._commonArgs()]);
+    await _runWallhavenJob('更新', ['quick-update']);
   }
 
   Future<void> _runWallhavenJob(
@@ -607,50 +640,8 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
       _showSnack('$title 失败');
     }
 
-    await _refreshLibrary();
-  }
-
-  List<String> _commonArgs() {
-    final args = [
-      '--save-dir',
-      _saveDir,
-      '--site-url',
-      _siteUrlController.text.trim(),
-      '--extensions',
-      _extensionsController.text.trim().isEmpty
-          ? 'jpg,png,jpeg'
-          : _extensionsController.text.trim(),
-      '--timeout',
-      '15',
-      '--tries',
-      '3',
-    ];
-
-    final cookie = _cookieController.text.trim();
-    if (cookie.isNotEmpty) {
-      args.addAll(['--cookie', cookie]);
-    }
-
-    final referer = _refererController.text.trim();
-    if (referer.isNotEmpty) {
-      args.addAll(['--referer', referer]);
-    }
-
-    if (_force) {
-      args.add('--force');
-    }
-
-    return args;
-  }
-
-  Future<void> _cancelJob() async {
-    await widget.cliService.cancel();
-    if (mounted) {
-      setState(() {
-        _isRunning = false;
-        _status = '已取消';
-      });
-      _appendLog('任务已取消');
+    if (widget.refreshAfterJob) {
+      await _refreshLibrary();
     }
   }
 
@@ -675,20 +666,97 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
     });
   }
 
-  Future<void> _openPreview(File file) async {
-    setState(() => _selectedFile = file);
-    await Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 160),
-        reverseTransitionDuration: const Duration(milliseconds: 140),
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return FadeTransition(
-            opacity: animation,
-            child: WallpaperPreviewPage(imageFile: file),
-          );
-        },
-      ),
+  void _selectFile(File file) {
+    final keyboard = HardwareKeyboard.instance;
+    final additive =
+        _multiSelect || keyboard.isControlPressed || keyboard.isMetaPressed;
+    final files = _visibleFiles;
+    final anchorIndex = files.indexWhere(
+      (item) => item.path == _selectionAnchor,
     );
+    final targetIndex = files.indexWhere((item) => item.path == file.path);
+    setState(() {
+      if (keyboard.isShiftPressed && anchorIndex >= 0 && targetIndex >= 0) {
+        if (!additive) _selectedPaths.clear();
+        final start = anchorIndex < targetIndex ? anchorIndex : targetIndex;
+        final end = anchorIndex > targetIndex ? anchorIndex : targetIndex;
+        _selectedPaths.addAll(
+          files.sublist(start, end + 1).map((item) => item.path),
+        );
+      } else {
+        if (additive && _selectedPaths.contains(file.path)) {
+          _selectedPaths.remove(file.path);
+        } else {
+          if (!additive) _selectedPaths.clear();
+          _selectedPaths.add(file.path);
+        }
+        _selectionAnchor = file.path;
+      }
+      _selectedFile = _selectedPaths.contains(file.path)
+          ? file
+          : _imageFiles
+                .where((item) => _selectedPaths.contains(item.path))
+                .lastOrNull;
+    });
+  }
+
+  void _openPreview(File file) {
+    if (!_selectedPaths.contains(file.path)) _selectFile(file);
+    _preview.value = file;
+  }
+
+  void _closePreview() => _preview.value = null;
+
+  void _loadHidden() {
+    try {
+      _hidden
+        ..clear()
+        ..addAll(_hiddenStore.load());
+      _hiddenLoadFailed = false;
+    } catch (error) {
+      _hiddenLoadFailed = true;
+      _logs.add('隐藏记录读取失败: $error');
+    }
+  }
+
+  Future<void> _toggleHidden(File file) async {
+    await _setHidden([
+      file,
+    ], hide: !_hidden.contains(_hiddenStore.keyFor(file)));
+  }
+
+  Future<void> _setHidden(List<File> files, {required bool hide}) async {
+    if (_savingHidden || _hiddenLoadFailed) return;
+    if (files.isEmpty) return;
+    setState(() => _savingHidden = true);
+    final next = {..._hidden};
+    final keys = files.map(_hiddenStore.keyFor);
+    if (hide) {
+      next.addAll(keys);
+    } else {
+      next.removeAll(keys);
+    }
+    try {
+      await _hiddenStore.save(next);
+      if (!mounted) return;
+      _closePreview();
+      setState(() {
+        _hidden
+          ..clear()
+          ..addAll(next);
+        _selectedFile = null;
+        _selectedPaths.clear();
+        _selectionAnchor = null;
+      });
+      _showSnack(
+        hide ? '已隐藏 ${files.length} 张，可在「查看已隐藏」中恢复' : '已恢复显示 ${files.length} 张',
+      );
+    } catch (error) {
+      _showSnack('保存隐藏记录失败');
+      _appendLog('保存隐藏记录失败: $error');
+    } finally {
+      if (mounted) setState(() => _savingHidden = false);
+    }
   }
 
   Future<void> _openFolder(String path) async {
@@ -730,187 +798,58 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
 }
 
 class _ControlRail extends StatelessWidget {
-  const _ControlRail({
-    required this.isRunning,
-    required this.force,
-    required this.saveDirController,
-    required this.siteUrlController,
-    required this.cookieController,
-    required this.refererController,
-    required this.extensionsController,
-    required this.pageRangeController,
-    required this.imageController,
-    required this.startPageController,
-    required this.maxPagesController,
-    required this.onForceChanged,
-    required this.onPickFolder,
-    required this.onRefresh,
-    required this.onOpenFolder,
-    required this.onUpdate,
-    required this.onDownloadPages,
-    required this.onDownloadImage,
-    required this.onRetry,
-    required this.onCancel,
-  });
+  const _ControlRail({required this.isRunning, required this.onUpdate});
 
   final bool isRunning;
-  final bool force;
-  final TextEditingController saveDirController;
-  final TextEditingController siteUrlController;
-  final TextEditingController cookieController;
-  final TextEditingController refererController;
-  final TextEditingController extensionsController;
-  final TextEditingController pageRangeController;
-  final TextEditingController imageController;
-  final TextEditingController startPageController;
-  final TextEditingController maxPagesController;
-  final ValueChanged<bool> onForceChanged;
-  final VoidCallback onPickFolder;
-  final VoidCallback onRefresh;
-  final VoidCallback onOpenFolder;
   final VoidCallback onUpdate;
-  final VoidCallback onDownloadPages;
-  final VoidCallback onDownloadImage;
-  final VoidCallback onRetry;
-  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 326,
+      width: 208,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
       decoration: const BoxDecoration(
         color: _surface,
         border: Border(right: BorderSide(color: _line)),
       ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Da Downloader',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: _text,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Icon(Icons.landscape_outlined, color: _accent, size: 36),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Da Downloader',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w600,
+              color: _text,
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Wallhaven',
-              style: TextStyle(color: _muted, fontSize: 12),
-            ),
-            const SizedBox(height: 20),
-            const _SectionLabel('图库'),
-            _PathField(
-              controller: saveDirController,
-              onPickFolder: onPickFolder,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _QuietButton(
-                    icon: Icons.refresh_rounded,
-                    label: '刷新',
-                    onPressed: isRunning ? null : onRefresh,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _QuietButton(
-                    icon: Icons.folder_open_rounded,
-                    label: '打开',
-                    onPressed: onOpenFolder,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-            const _SectionLabel('下载'),
-            _AppTextField(controller: siteUrlController, label: '列表地址'),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _AppTextField(
-                    controller: startPageController,
-                    label: '起始页',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _AppTextField(
-                    controller: maxPagesController,
-                    label: '页数',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _PrimaryButton(
-              icon: Icons.sync_rounded,
-              label: isRunning ? '更新中' : '更新收藏',
-              onPressed: isRunning ? null : onUpdate,
-            ),
-            const SizedBox(height: 12),
-            _AppTextField(controller: pageRangeController, label: '页码'),
-            const SizedBox(height: 8),
-            _QuietButton(
-              icon: Icons.download_rounded,
-              label: '下载页面',
-              onPressed: isRunning ? null : onDownloadPages,
-            ),
-            const SizedBox(height: 12),
-            _AppTextField(controller: imageController, label: '图片 ID / 链接'),
-            const SizedBox(height: 8),
-            _QuietButton(
-              icon: Icons.add_photo_alternate_rounded,
-              label: '下载单图',
-              onPressed: isRunning ? null : onDownloadImage,
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _QuietButton(
-                    icon: Icons.replay_rounded,
-                    label: '重试失败',
-                    onPressed: isRunning ? null : onRetry,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _DangerButton(
-                    icon: Icons.stop_rounded,
-                    label: '取消',
-                    onPressed: isRunning ? onCancel : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-            const _SectionLabel('请求'),
-            _AppTextField(controller: extensionsController, label: '格式'),
-            const SizedBox(height: 10),
-            _AppTextField(controller: refererController, label: 'Referer'),
-            const SizedBox(height: 10),
-            _AppTextField(
-              controller: cookieController,
-              label: 'Cookie',
-              obscureText: true,
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: force,
-              dense: true,
-              activeThumbColor: _accent,
-              title: const Text('强制下载', style: TextStyle(fontSize: 13)),
-              onChanged: isRunning ? null : onForceChanged,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Wallhaven 壁纸收藏',
+            style: TextStyle(color: _muted, fontSize: 12),
+          ),
+          const SizedBox(height: 40),
+          _PrimaryButton(
+            icon: Icons.sync_rounded,
+            label: isRunning ? '正在更新…' : '一键更新',
+            onPressed: isRunning ? null : onUpdate,
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '收藏里的新风景，一键保存到本地。',
+            style: TextStyle(color: _muted, fontSize: 12, height: 1.8),
+          ),
+          const Spacer(),
+          const Text(
+            '让桌面，换一片风景。',
+            style: TextStyle(color: _muted, fontSize: 11),
+          ),
+        ],
       ),
     );
   }
@@ -926,6 +865,13 @@ class _GalleryHeader extends StatelessWidget {
     required this.onOpenSelected,
     required this.onOpenSelectedFolder,
     required this.onSetWallpaper,
+    required this.showHidden,
+    required this.onToggleHiddenView,
+    required this.onToggleHidden,
+    required this.selectionCount,
+    required this.multiSelect,
+    required this.onToggleMultiSelect,
+    required this.onSelectAll,
   });
 
   final int count;
@@ -936,15 +882,24 @@ class _GalleryHeader extends StatelessWidget {
   final VoidCallback? onOpenSelected;
   final VoidCallback? onOpenSelectedFolder;
   final VoidCallback? onSetWallpaper;
+  final bool showHidden;
+  final VoidCallback onToggleHiddenView;
+  final VoidCallback? onToggleHidden;
+  final int selectionCount;
+  final bool multiSelect;
+  final VoidCallback onToggleMultiSelect;
+  final VoidCallback onSelectAll;
 
   @override
   Widget build(BuildContext context) {
-    final selectedName = selectedFile == null
-        ? '未选择'
+    final selectedName = multiSelect || selectionCount > 1
+        ? '已选择 $selectionCount 张'
+        : selectedFile == null
+        ? (showHidden ? '已隐藏的壁纸' : '我的壁纸')
         : selectedFile!.uri.pathSegments.last;
 
     return Container(
-      height: 74,
+      height: 92,
       padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: const BoxDecoration(
         color: _ink,
@@ -969,7 +924,11 @@ class _GalleryHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$count 张 · $status',
+                  multiSelect
+                      ? '$count 张 · 点击选择或取消，Shift 连选'
+                      : '$count 张 · $status',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: _muted, fontSize: 12),
                 ),
               ],
@@ -982,6 +941,31 @@ class _GalleryHeader extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
             ),
           const SizedBox(width: 10),
+          _HeaderIcon(
+            icon: multiSelect ? Icons.close_rounded : Icons.checklist_rounded,
+            tooltip: multiSelect ? '退出多选' : '多选壁纸',
+            onPressed: onToggleMultiSelect,
+          ),
+          if (multiSelect)
+            _HeaderIcon(
+              icon: Icons.select_all_rounded,
+              tooltip: '全选',
+              onPressed: onSelectAll,
+            ),
+          _HeaderIcon(
+            icon: showHidden
+                ? Icons.photo_library_outlined
+                : Icons.visibility_off_outlined,
+            tooltip: showHidden ? '返回图库' : '查看已隐藏',
+            onPressed: onToggleHiddenView,
+          ),
+          _HeaderIcon(
+            icon: showHidden
+                ? Icons.visibility_outlined
+                : Icons.hide_image_outlined,
+            tooltip: showHidden ? '恢复显示' : '隐藏所选壁纸',
+            onPressed: onToggleHidden,
+          ),
           _HeaderIcon(
             icon: Icons.refresh_rounded,
             tooltip: '刷新图库',
@@ -1010,6 +994,7 @@ class _GalleryHeader extends StatelessWidget {
 
 class _WallpaperTile extends StatefulWidget {
   const _WallpaperTile({
+    super.key,
     required this.file,
     required this.selected,
     required this.onSelected,
@@ -1027,6 +1012,9 @@ class _WallpaperTile extends StatefulWidget {
 
 class _WallpaperTileState extends State<_WallpaperTile> {
   bool _hovered = false;
+  Offset? _pressPosition;
+  int? _pressPointer;
+  bool _secondTap = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1036,31 +1024,56 @@ class _WallpaperTileState extends State<_WallpaperTile> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onSelected,
-        onDoubleTap: widget.onOpenPreview,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: widget.selected
-                  ? _accent
-                  : _hovered
-                  ? const Color(0xFF48505C)
-                  : Colors.transparent,
+      child: Listener(
+        // Selection must not wait for the double-tap recognizer's timeout.
+        // Track movement so dragging the gallery never changes selection.
+        onPointerDown: (event) {
+          if (event.buttons != kPrimaryMouseButton) return;
+          _pressPosition = event.position;
+          _pressPointer = event.pointer;
+          _secondTap = false;
+        },
+        onPointerMove: (event) {
+          if (event.pointer == _pressPointer &&
+              _pressPosition != null &&
+              (event.position - _pressPosition!).distance > kTouchSlop) {
+            _pressPosition = null;
+          }
+        },
+        onPointerCancel: (_) => _pressPosition = null,
+        onPointerUp: (event) {
+          if (event.pointer == _pressPointer &&
+              _pressPosition != null &&
+              !_secondTap) {
+            widget.onSelected();
+          }
+          _pressPosition = null;
+        },
+        child: GestureDetector(
+          onDoubleTapDown: (_) => _secondTap = true,
+          onDoubleTap: widget.onOpenPreview,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: widget.selected
+                    ? _accent
+                    : _hovered
+                    ? const Color(0xFF48505C)
+                    : Colors.transparent,
+              ),
             ),
-          ),
-          padding: const EdgeInsets.all(2),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Hero(
-                  tag: widget.file.path,
-                  child: Image.file(
+            padding: const EdgeInsets.all(2),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.file(
                     widget.file,
+                    // Keep thumbnail decode/cache independent from the preview.
+                    cacheWidth: 512,
+                    gaplessPlayback: true,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) =>
                         const ColoredBox(
@@ -1071,36 +1084,52 @@ class _WallpaperTileState extends State<_WallpaperTile> {
                           ),
                         ),
                   ),
-                ),
-                AnimatedOpacity(
-                  opacity: showOverlay ? 1 : 0,
-                  duration: const Duration(milliseconds: 140),
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      height: 46,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      alignment: Alignment.centerLeft,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.74),
-                          ],
+                  AnimatedOpacity(
+                    opacity: showOverlay ? 1 : 0,
+                    duration: const Duration(milliseconds: 80),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        height: 46,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        alignment: Alignment.centerLeft,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.74),
+                            ],
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        filename,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: _text),
+                        child: Text(
+                          filename,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: _text),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                  if (widget.selected)
+                    const Positioned(
+                      right: 10,
+                      top: 10,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: _ink,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.check_circle_rounded,
+                          color: _accent,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1123,7 +1152,7 @@ class _JobConsole extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 126,
+      height: 140,
       decoration: const BoxDecoration(
         color: _surface,
         border: Border(top: BorderSide(color: _line)),
@@ -1131,7 +1160,7 @@ class _JobConsole extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 360,
+            width: 260,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 14, 12, 12),
               child: _PayloadSummary(payload: payload),
@@ -1242,45 +1271,42 @@ class _Metric extends StatelessWidget {
 }
 
 class _EmptyGallery extends StatelessWidget {
-  const _EmptyGallery({required this.onPickFolder, required this.onUpdate});
-
-  final VoidCallback onPickFolder;
-  final VoidCallback onUpdate;
+  const _EmptyGallery();
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.photo_library_outlined, color: _muted, size: 50),
-            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: _surfaceHigh,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.landscape_outlined,
+                color: _accent,
+                size: 42,
+              ),
+            ),
+            const SizedBox(height: 24),
             const Text(
-              '图库为空',
+              '等待第一片风景',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
+                fontSize: 22,
+                fontWeight: FontWeight.w500,
                 color: _text,
               ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _QuietButton(
-                  icon: Icons.folder_open_rounded,
-                  label: '选择目录',
-                  onPressed: onPickFolder,
-                ),
-                const SizedBox(width: 10),
-                _PrimaryButton(
-                  icon: Icons.sync_rounded,
-                  label: '更新',
-                  onPressed: onUpdate,
-                ),
-              ],
+            const SizedBox(height: 10),
+            const Text(
+              '点击左侧「一键更新」，收藏的壁纸就会出现在这里。',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _muted, fontSize: 13, height: 1.8),
             ),
           ],
         ),
@@ -1290,9 +1316,18 @@ class _EmptyGallery extends StatelessWidget {
 }
 
 class WallpaperPreviewPage extends StatelessWidget {
-  const WallpaperPreviewPage({super.key, required this.imageFile});
+  const WallpaperPreviewPage({
+    super.key,
+    required this.imageFile,
+    required this.onClose,
+    required this.onToggleHidden,
+    required this.isHidden,
+  });
 
   final File imageFile;
+  final VoidCallback onClose;
+  final VoidCallback onToggleHidden;
+  final bool isHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -1301,9 +1336,15 @@ class WallpaperPreviewPage extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Hero(
-            tag: imageFile.path,
-            child: Image.file(imageFile, fit: BoxFit.contain),
+          Image.file(
+            imageFile,
+            fit: BoxFit.contain,
+            cacheWidth:
+                (MediaQuery.sizeOf(context).width *
+                        MediaQuery.devicePixelRatioOf(context))
+                    .ceil(),
+            errorBuilder: (context, error, stack) =>
+                const Center(child: Text('图片无法读取')),
           ),
           Positioned(
             top: 18,
@@ -1313,7 +1354,7 @@ class WallpaperPreviewPage extends StatelessWidget {
                 _PreviewIcon(
                   icon: Icons.arrow_back_rounded,
                   tooltip: '返回',
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: onClose,
                 ),
               ],
             ),
@@ -1323,6 +1364,13 @@ class WallpaperPreviewPage extends StatelessWidget {
             bottom: 18,
             child: _PreviewToolbar(
               children: [
+                _PreviewIcon(
+                  icon: isHidden
+                      ? Icons.visibility_outlined
+                      : Icons.hide_image_outlined,
+                  tooltip: isHidden ? '恢复显示' : '隐藏这张壁纸',
+                  onPressed: onToggleHidden,
+                ),
                 _PreviewIcon(
                   icon: Icons.image_search_rounded,
                   tooltip: '定位文件',
@@ -1453,90 +1501,6 @@ if (-not \$ok) { exit 1 }
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: _muted,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _PathField extends StatelessWidget {
-  const _PathField({required this.controller, required this.onPickFolder});
-
-  final TextEditingController controller;
-  final VoidCallback onPickFolder;
-
-  @override
-  Widget build(BuildContext context) {
-    return _AppTextField(
-      controller: controller,
-      label: '保存目录',
-      suffix: IconButton(
-        tooltip: '选择目录',
-        icon: const Icon(Icons.more_horiz_rounded),
-        onPressed: onPickFolder,
-      ),
-    );
-  }
-}
-
-class _AppTextField extends StatelessWidget {
-  const _AppTextField({
-    required this.controller,
-    required this.label,
-    this.suffix,
-    this.obscureText = false,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final Widget? suffix;
-  final bool obscureText;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      obscureText: obscureText,
-      style: const TextStyle(fontSize: 13, color: _text),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: _muted, fontSize: 12),
-        suffixIcon: suffix,
-        filled: true,
-        fillColor: _surfaceHigh,
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: _line),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: _accent),
-        ),
-      ),
-    );
-  }
-}
-
 class _PrimaryButton extends StatelessWidget {
   const _PrimaryButton({
     required this.icon,
@@ -1560,62 +1524,6 @@ class _PrimaryButton extends StatelessWidget {
         disabledBackgroundColor: _line,
         disabledForegroundColor: _muted,
         minimumSize: const Size(0, 40),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-}
-
-class _QuietButton extends StatelessWidget {
-  const _QuietButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      icon: Icon(icon, size: 18),
-      label: Text(label, overflow: TextOverflow.ellipsis),
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _text,
-        disabledForegroundColor: _muted,
-        minimumSize: const Size(0, 40),
-        side: const BorderSide(color: _line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-}
-
-class _DangerButton extends StatelessWidget {
-  const _DangerButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      icon: Icon(icon, size: 18),
-      label: Text(label, overflow: TextOverflow.ellipsis),
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _danger,
-        disabledForegroundColor: _muted,
-        minimumSize: const Size(0, 40),
-        side: const BorderSide(color: _danger),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );

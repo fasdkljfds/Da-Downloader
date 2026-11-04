@@ -77,9 +77,11 @@ void main() {
     await pumpAppFrame(tester);
 
     expect(find.text('Da Downloader'), findsOneWidget);
-    expect(find.text('图库为空'), findsOneWidget);
-    expect(find.text('更新收藏'), findsOneWidget);
-    expect(find.text('任务结果'), findsOneWidget);
+    expect(find.text('等待第一片风景'), findsOneWidget);
+    expect(find.text('一键更新'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(find.text('任务结果'), findsNothing);
   });
 
   testWidgets('runs update through injected cli service', (tester) async {
@@ -97,14 +99,21 @@ void main() {
       ),
     );
     await pumpAppFrame(tester);
-    expect(find.text('图库为空'), findsOneWidget);
+    expect(find.text('等待第一片风景'), findsOneWidget);
 
-    await tester.tap(find.text('更新收藏'));
+    await tester.tap(find.text('一键更新'));
     await pumpAppFrame(tester);
     await pumpUntilFound(tester, find.text('fake log'));
 
     expect(service.lastArgs, isNotNull);
-    expect(service.lastArgs, contains('update'));
+    expect(service.lastArgs, [
+      '-B',
+      '-m',
+      'cli.cli_main',
+      '--json',
+      'wallhaven',
+      'quick-update',
+    ]);
     expect(find.text('下载 1'), findsOneWidget);
     expect(find.text('fake log'), findsOneWidget);
   });

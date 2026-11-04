@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch
 
 from cli.cli_main import main, parse_extensions, parse_pages, positive_int
 from downloader.wallhaven import DownloadResult, WallhavenDownloader
@@ -93,6 +94,32 @@ class ContextManagerTest(unittest.TestCase):
 
 
 class JsonCliTest(unittest.TestCase):
+    def test_quick_update_reuses_main_configuration_and_pages(self):
+        with patch('cli.wallhaven_cli.create_default_downloader') as factory:
+            factory.return_value.download_pages.return_value = DownloadResult(downloaded=2)
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                main(['--json', 'wallhaven', 'quick-update'])
+
+        factory.assert_called_once_with()
+        factory.return_value.download_pages.assert_called_once_with((1, 2, 3, 4, 5))
+        self.assertEqual(json.loads(stdout.getvalue())['downloaded'], 2)
+
+    def test_main_configuration_is_passed_to_downloader(self):
+        from downloader.wallhaven import create_default_downloader
+
+        with patch('downloader.wallhaven.WallhavenDownloader') as factory:
+            create_default_downloader()
+
+        options = factory.call_args.kwargs
+        self.assertEqual(options['save_dir'], r'F:\estore\wallpaper')
+        self.assertEqual(options['extensions'], ('.jpg', '.png', '.jpeg'))
+        self.assertEqual(options['site_url'],
+                         'https://wallhaven.cc/user/sjjfirk/favorites/2119257?purity=001&page=')
+        self.assertTrue(options['cookie'])
+        self.assertEqual(options['timeout'], 15)
+        self.assertEqual(options['max_tries'], 3)
+
     def test_status_json_before_source(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             stdout = io.StringIO()
