@@ -7,8 +7,8 @@
 首次准备 Git for Windows（含 Git LFS）、Python 3.10 或更新版本（含 `py` 启动器）、Flutter，以及 Visual Studio 的「使用 C++ 的桌面开发」工作负载。
 
 ```powershell
-git clone https://github.com/fasdkljfds/project04.git
-cd project04
+git clone https://github.com/fasdkljfds/Da-Downloader.git
+cd Da-Downloader
 .\deploy-wallpaper.cmd
 ```
 
