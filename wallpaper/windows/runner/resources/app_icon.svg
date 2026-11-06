@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Wallpaper — Alpine Dusk</title>
+  <defs>
+    <linearGradient id="sky" x2="0.85" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#20204D"/>
+      <stop offset=".55" stop-color="#3F3678"/>
+      <stop offset="1" stop-color="#7650A2"/>
+    </linearGradient>
+    <linearGradient id="sun" x2="0" y2="1">
+      <stop stop-color="#FFF0BD"/>
+      <stop offset="1" stop-color="#FF9B8E"/>
+    </linearGradient>
+    <linearGradient id="ridge" x2=".9" y2="1">
+      <stop stop-color="#DBBCFF"/>
+      <stop offset="1" stop-color="#8173F0"/>
+    </linearGradient>
+    <linearGradient id="foreground" x2=".8" y2="1">
+      <stop stop-color="#655AE1"/>
+      <stop offset="1" stop-color="#392C8A"/>
+    </linearGradient>
+    <linearGradient id="rim" x2=".75" y2="1">
+      <stop stop-color="#FBEDFF" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#D2B6FF" stop-opacity=".14"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="61" fill="url(#sky)"/>
+  <circle cx="172" cy="87" r="32" fill="#EFA0B9" opacity=".16"/>
+  <circle cx="172" cy="87" r="25" fill="url(#sun)"/>
+  <path d="M58 61h5m-2.5-2.5v5" fill="none" stroke="#F5DCFF"
+        stroke-width="3" stroke-linecap="round"/>
+  <circle cx="91" cy="47" r="2" fill="#D9C2FF" opacity=".7"/>
+  <path d="M8 186 83 102a10 10 0 0 1 15 0l40 46 25-25a9 9 0 0 1 13 0l72 66
+           a61 61 0 0 1-61 59H69a61 61 0 0 1-61-61z" fill="url(#ridge)"/>
+  <path d="m60 128 23-26a10 10 0 0 1 15 0l25 29-20-8-12 6-11-7z" fill="#F8EAFF"/>
+  <path d="M8 192c36-29 66-39 96-31 24 6 35 18 58 18 25 0 49-15 86-3v11
+           a61 61 0 0 1-61 61H69a61 61 0 0 1-61-56z" fill="url(#foreground)"/>
+  <path d="M26 220c38-22 72-32 112-28 28 3 52 8 85-2
+           -26 17-58 15-86 15-34 0-63 9-89 29a61 61 0 0 1-22-14z"
+        fill="#A39AFF" opacity=".55"/>
+  <rect x="9.5" y="9.5" width="237" height="237" rx="59.5"
+        fill="none" stroke="url(#rim)" stroke-width="3"/>
+</svg>

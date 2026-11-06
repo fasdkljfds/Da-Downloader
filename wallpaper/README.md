@@ -20,7 +20,7 @@ flutter run -d windows
 
 The app calls `py -B -m cli.cli_main --json wallhaven quick-update`, so run it from this repo with `py.exe` available on PATH.
 
-更新复用 `downloader/wallhaven.py` 中的 `create_default_downloader()`，与脚本主入口使用同一份配置（包含 Cookie），下载第 1–5 页并跳过已有图片。保存目录为 `F:\estore\wallpaper`，界面不提供参数编辑。
+更新复用 `downloader/wallhaven.py` 中的 `create_default_downloader()`，与脚本主入口使用同一份配置（包含 Cookie），下载第 1–5 页并跳过已有图片。下载目录与当前图库一致。直接运行应用时，优先使用 `DA_WALLPAPER_DIR` 指定的目录，其次使用已存在的 `F:\estore\wallpaper`，最后使用仓库内的 `libraries/wallpaper-sync`。
 
 ## Checks
 
@@ -46,3 +46,5 @@ py -B -m unittest discover -v
 ```powershell
 flutter build windows
 ```
+
+Windows 构建会通过 `Runner.rc` 将 `windows/runner/resources/app_icon.ico` 嵌入 EXE。图标的矢量源文件是同目录下的 `app_icon.svg`。修改 SVG 后，请重新生成多尺寸 ICO 再构建。

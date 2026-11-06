@@ -13,7 +13,7 @@ void main() {
   runApp(const DaDownloaderApp());
 }
 
-const _imageExtensions = {'.jpg', '.jpeg', '.png'};
+const _imageExtensions = {'.jpg', '.jpeg', '.png', '.webp'};
 
 const _ink = Color(0xFF11151B);
 const _surface = Color(0xFF171D25);
@@ -72,7 +72,13 @@ String _detectRepoRoot() {
 }
 
 String _defaultSaveDir(String repoRoot) {
-  return r'F:\estore\wallpaper';
+  final configured = Platform.environment['DA_WALLPAPER_DIR'];
+  if (configured != null && configured.isNotEmpty) return configured;
+
+  const existing = r'F:\estore\wallpaper';
+  if (Directory(existing).existsSync()) return existing;
+
+  return _joinPath(repoRoot, 'libraries', 'wallpaper-sync');
 }
 
 abstract class CliService {
@@ -590,7 +596,7 @@ class _WallpaperHomePageState extends State<WallpaperHomePage> {
   }
 
   Future<void> _runUpdate() async {
-    await _runWallhavenJob('更新', ['quick-update']);
+    await _runWallhavenJob('更新', ['quick-update', '--save-dir', _saveDir]);
   }
 
   Future<void> _runWallhavenJob(

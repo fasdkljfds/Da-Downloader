@@ -410,9 +410,9 @@ def print_result(result: DownloadResult, stream=None):
 MAIN_PAGES = (1, 2, 3, 4, 5)
 
 
-def create_default_downloader() -> WallhavenDownloader:
+def create_default_downloader(*, save_dir: str = r"F:\estore\wallpaper") -> WallhavenDownloader:
     return WallhavenDownloader(
-        save_dir=r"F:\estore\wallpaper",
+        save_dir=save_dir,
         extensions=(".jpg", ".png", ".jpeg"),
         site_url="https://wallhaven.cc/user/sjjfirk/favorites/2119257?purity=001&page=",
         cookie="""_pk_id.1.01b8=4ba6e2403d32ff0e.1766719365.; remember_web_59ba36addc2b2f9401580f014c7f58ea4e30989d=eyJpdiI6Im8ycHhnUzlkdnFnS0ZBMVBTa3c0dWc9PSIsInZhbHVlIjoiYWYraTVUZW1GM0VqTU5XUm0rQmxGa1FRcGJPb0JheFJhdFJXUkYxSFM5Mk1Ec1hnMWF5WU5jb0NjSkpacXlMRlIzRCtDc0pGUldIZzIyMTU4N2NpOHhjWUI3M0NUTzZGbGcrYWlKWTZDajY0aDVZQWMrT2lLRGxuZTlFSEZSNUt3VitnT1Y5ZTM0Z1ZQdERcL1NMRGxXdTNNMnJHR3lIblpMR21jeGpXbXF3VVRNWnBFU3IzSlpKemVUdFE2elFIdiIsIm1hYyI6ImMxYTE1NmMwM2JjZjlkYzQ0N2Q2ODhiZjIwNDU1MWJmN2U1YmUzYmIwZjM3MzcyYWJkNDhkM2E3MjRmZTYwZGUifQ%3D%3D; _pk_ref.1.01b8=%5B%22%22%2C%22%22%2C1788426551%2C%22https%3A%2F%2Fwww.google.com%2F%22%5D; _pk_ses.1.01b8=1; cf_clearance=QcCC9bRmzSanD.RWZIPB_hfiLXbfXJqZSPV6Qt6ZDMA-1788428683-1.2.1.1-owl0K5uFRwjCYSYeknp_R.4FOIeTQI7OJCDBTRIkVXCVq9ban9gZOTt0zwnJFwI.ljarFRHMZ38kvGzO0mQyp3MidqkTyCoVJOMiA513E7UWBVth.ZOGNCw9sYD5KBg7Wc7o8XaVi.iOXVHMDmcx70tyzAmyqr3KvWpuxC.H85cZHkveQhKFmcxWHEPQdxFTICMVz7LK5lAsjRJR2102QfXrOrvRZi4Kx_r0RP9YSqcSCvS4HMjjnJMlAr22JKXNlZ.WGNWFFcxRHixhd23_CxHl4SbcgNhsBQ1IyziPQz5cY1TZP.d8kbdw83QbdYV21urSMNR6jXmiaHzIeMw2pgXFS3U2JphbcU8j45_sRrQUh33DXFAahnZv3XDR2NrzxkfoSy6ZUQOwCwWeSGxH1Fjsx8rZm1nctHBF3onkqwdImshQXqvBxR7eiUZGNtUx; XSRF-TOKEN=eyJpdiI6IktKOER3Nis4M2NLXC84ZXN4VllxbjhRPT0iLCJ2YWx1ZSI6IlFFeHZ2dWV1QVJ5YnVtXC91WjF0alhGUFNLdG96ZTUzcStpU2lnM0ZFVm5GTzhqRWxNTnNoZlh1aW8rXC9WbTBJdCIsIm1hYyI6IjNkZDJjNjZhZjY1N2EzNmM3ZWM1MmRjMTFkOGYxYmM2YTMxNDA1ZTE1YWNiYmQyMDgwMmE2ODI0ZTFjYTUxZDYifQ%3D%3D; wallhaven_session=eyJpdiI6Ik43MkRpcVQzQWpiUTZsQjNCcTZQSWc9PSIsInZhbHVlIjoibk5rUXd0Z0pQZ1JLejNwRFh1MEJ5NlF4WDJFR3Q1ZGs5aUg4cWd3RGdsZ3M3aUNpMEhCWEV2T3JQeUcxV25kbiIsIm1hYyI6ImU4MzYwMjYzY2VlZjNmNTJjMDc1NDFhMGYwMjRiYjlhMGE1MmRhMzUzZmFhMDdmMWEwODRiYmY2OTU0YzM2MjEifQ%3D%3D""",

@@ -113,6 +113,8 @@ void main() {
       '--json',
       'wallhaven',
       'quick-update',
+      '--save-dir',
+      tempDir.path,
     ]);
     expect(find.text('下载 1'), findsOneWidget);
     expect(find.text('fake log'), findsOneWidget);

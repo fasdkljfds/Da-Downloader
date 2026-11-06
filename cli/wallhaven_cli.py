@@ -131,7 +131,8 @@ def create_wallhaven_downloader(args: argparse.Namespace) -> WallhavenDownloader
 
 
 def run_quick_update(args: argparse.Namespace) -> DownloadResult:
-    downloader = create_default_downloader()
+    options = {"save_dir": args.save_dir} if args.save_dir is not None else {}
+    downloader = create_default_downloader(**options)
     return downloader.download_pages(MAIN_PAGES)
 
 
@@ -183,6 +184,7 @@ def add_wallhaven_parser(subparsers) -> argparse.ArgumentParser:
     quick_parser = wallhaven_subparsers.add_parser(
         "quick-update", help="Download using the wallhaven.py main configuration."
     )
+    quick_parser.add_argument("--save-dir", help="Directory for the downloaded images.")
     quick_parser.set_defaults(func=run_quick_update, printer=print_result)
 
     page_parser = wallhaven_subparsers.add_parser(
